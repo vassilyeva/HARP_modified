@@ -1,0 +1,8 @@
+Number of nodes: 23
+Number of edges: 56
+Underlying network embedding model: line
+{'window_size': 1, 'sg': 1, 'sfdp_path': 'bin/sfdp_linux', 'iter_count': 50, 'sample': 0.001, 'scale': 1, 'lr_scheme': 'default', 'representation_size': 64, 'hs': 0, 'alpha': 0.025, 'min_alpha': 0.001}
+Connected graph.
+Subgraph 1 with 23 nodes and 56 edges
+Graph Coarsening...
+Coarsening with Louvain
