@@ -228,7 +228,7 @@ def external_ec_coarsening(graph, sfdp_path, coarsening_scheme = 2):
     nx_graph = nx.from_scipy_sparse_matrix(matrix)
     dendro = community.generate_dendrogram(nx_graph)
 
-    coarse_graphs = []
+    coarse_graphs = [DoubleWeightedDiGraph(graph)]
     merges = []
     for l in range(len(dendro)):
         level = community.partition_at_level(dendro, l)
@@ -236,7 +236,7 @@ def external_ec_coarsening(graph, sfdp_path, coarsening_scheme = 2):
         filename = 'induced'+str(l)+'.edgelist'
         nx.write_edgelist(induced, filename)
         m_graph = magicgraph.load_edgelist(filename, undirected = True)
-        coarse_graphs.append(m_graph)
+        coarse_graphs.append(DoubleWeightedDiGraph(m_graph))
         merges.append(level)
         print m_graph;print
 
