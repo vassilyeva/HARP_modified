@@ -163,18 +163,13 @@ class DoubleWeightedDiGraph(WeightedDiGraph):
         return path
 
 def external_collapsing(graph, merged):
-    print 'in external collapsing; merged is '
-    print merged; print
     coarsened_graph = DoubleWeightedDiGraph()
     edges, weights = graph.get_int_edges()
-    print 'edges '
-    print(edges); print
     merged_edge_to_weight = defaultdict(float)
     node_weight = {node: weight for node, weight in zip(graph.weighted_nodes, graph.weighted_nodes.weights)}
     new_node_weights = defaultdict(float)
     for (a, b), w in zip(edges, weights):
         merged_a, merged_b = merged[a], merged[b]
-        print('a: ', a, ' b: ', b, ' merged[a]: ', merged[a], ', merged[b]: ', merged[b])
         if merged_a != merged_b:
             merged_edge_to_weight[(merged_a, merged_b)] += w
     for node_pair, weight in merged_edge_to_weight.items():
@@ -222,46 +217,41 @@ def read_coarsening_info(coarsening_file_dir):
 # NOTE: THIS IS THE FNC THAT NEEDS TO BE UPDATED FOR DIFFERENT COARSENING STRATEGIES
 
 
-def external_ec_coarsening(graph, sfdp_path, coarsening_scheme = 2):
-    print("Coarsening with Louvain")
+def external_ec_coarsening(graph, sfdp_path, coarsening_scheme = 2, c_type = 'original'):
+    if c_type == 'louvain':
+        print("Coarsening with Louvain")
+        matrix = magicgraph.to_adjacency_matrix(graph)
+        nx_graph = nx.from_scipy_sparse_matrix(matrix)
+        dendro = community.generate_dendrogram(nx_graph)
+
+        coarse_graphs = [DoubleWeightedDiGraph(graph)]
+        merges = []
+        i = 0
+        for l in range(len(dendro)):
+            level = community.partition_at_level(dendro, l)
+            induced = community.induced_graph(level, nx_graph)
+            filename = 'induced'+str(l)+'.edgelist'
+            #nx.write_edgelist(induced, filename)
+            # write weighted graph to file
+            f = open(filename, 'w')
+            for u, v, a in induced.edges.data('weight', default = 1):
+                line = ' '.join([str(u), str(v), str(a)])
+                f.write(line + '\n')
+            f.close()
+            m_graph = magicgraph.load_weighted_edgelist(filename, undirected = True)
+            coarse_graphs.append(DoubleWeightedDiGraph(m_graph))
+            merges.append(level)
+            print('Level: ', i, 'N nodes: ', m_graph.number_of_nodes())
+            i+= 1
+
+        return coarse_graphs, merges
+    elif c_type == 'original':
+        return original_coarsening(graph, sfdp_path, coarsening_scheme)
+
+
+
+def original_coarsening(graph, sfdp_path, coarsening_scheme=2):
     matrix = magicgraph.to_adjacency_matrix(graph)
-    nx_graph = nx.from_scipy_sparse_matrix(matrix)
-    dendro = community.generate_dendrogram(nx_graph)
-
-    coarse_graphs = [DoubleWeightedDiGraph(graph)]
-    merges = []
-    for l in range(len(dendro)):
-        level = community.partition_at_level(dendro, l)
-        induced = community.induced_graph(level, nx_graph)
-        filename = 'induced'+str(l)+'.edgelist'
-        nx.write_edgelist(induced, filename)
-        m_graph = magicgraph.load_edgelist(filename, undirected = True)
-        coarse_graphs.append(DoubleWeightedDiGraph(m_graph))
-        merges.append(level)
-        print m_graph;print
-
-    return coarse_graphs, merges
-
-
-    print
-    exit()
-
-
-'''
-def external_ec_coarsening(graph, sfdp_path, coarsening_scheme=2):
-
-    matrix = magicgraph.to_adjacency_matrix(graph)
-    nx_graph = nx.from_scipy_sparse_matrix(matrix)
-    print('original nx edges: '); print nx_graph.edges(); print
-    dendro = community.generate_dendrogram(nx_graph)
-    level0 = community.partition_at_level(dendro, 0)
-    induced0 = community.induced_graph(level0, nx_graph)
-    print(induced0); print(); print(level0)
-    print(induced0.number_of_nodes())
-
-    print('original data format')
-    print('magic graph before coarsening: '); print(graph); print; print
-
 
     temp_dir = tempfile.mkdtemp()
     temp_fname = 'tmp.mtx'
@@ -270,9 +260,6 @@ def external_ec_coarsening(graph, sfdp_path, coarsening_scheme=2):
     sfdp_abs_path = os.path.abspath(sfdp_path)
     subprocess.call('%s -g%d -v -u -Tc %s 2>x' % (sfdp_abs_path, coarsening_scheme, input_fname), shell=True, cwd=temp_dir)
     recursive_graphs, recursive_merged_nodes = [], read_coarsening_info(temp_dir)
-    print('recursive merged nodes step 1')
-    print(recursive_merged_nodes);
-    print('len - ', len(recursive_merged_nodes)); print; print
     subprocess.call(['rm', '-r', temp_dir])
     cur_graph = graph
     iter_round = 1
@@ -299,17 +286,8 @@ def external_ec_coarsening(graph, sfdp_path, coarsening_scheme=2):
         iter_round += 1
         prev_node_count = cur_node_count
 
-    print("final coarsened output data is: ")
-    print('len of recursive graphs: ', len(recursive_graphs)); print
-    print('recursive graphs at level 3')
-    print(recursive_graphs[3]); print
-    print('recursive merged nodes at level')
-    for lev in recursive_merged_nodes:
-      print lev
-
-    exit()
     return recursive_graphs, recursive_merged_nodes
-'''
+
 def skipgram_coarsening_disconnected(graph, recursive_graphs=None, recursive_merged_nodes=None, **kwargs):
     print (kwargs)
     if graph.is_connected():
@@ -332,6 +310,7 @@ def skipgram_coarsening_disconnected(graph, recursive_graphs=None, recursive_mer
     sample = kwargs.get('sample', 1e-3)
     coarsening_scheme = kwargs.get('coarsening_scheme', 2)
     sfdp_path = kwargs.get('sfdp_path', './bin/sfdp_osx')
+    c_type = kwargs.get('c_type', 'original')
     embeddings = np.ndarray(shape=(graph.number_of_nodes(), representation_size), dtype=np.float32)
 
     for subgraph, reversed_mapping in zip(subgraphs, reversed_mappings):
@@ -356,7 +335,7 @@ def skipgram_coarsening_disconnected(graph, recursive_graphs=None, recursive_mer
         else:
             if recursive_graphs is None:
                 print ('Graph Coarsening...')
-                recursive_graphs, recursive_merged_nodes = external_ec_coarsening(subgraph, sfdp_path)
+                recursive_graphs, recursive_merged_nodes = external_ec_coarsening(subgraph, sfdp_path, coarsening_scheme, c_type)
             iter_counts = [iter_count for _ in range(len(recursive_graphs))]
             if hs == 1:
                 gc_model = skipgram_coarsening_hs(recursive_graphs, recursive_merged_nodes,
@@ -393,8 +372,8 @@ def skipgram_coarsening_disconnected(graph, recursive_graphs=None, recursive_mer
                                         hs=0)
 
 
-        for ind, vec in enumerate(gc_model[-1].wv.syn0):
-            real_ind = reversed_mapping[int(gc_model[-1].wv.index2word[ind])]
+        for ind, vec in enumerate(gc_model[-1].syn0):
+            real_ind = reversed_mapping[int(gc_model[-1].index2word[ind])]
             embeddings[real_ind] = vec
     return embeddings
 
@@ -453,14 +432,16 @@ def skipgram_coarsening_hs(recursive_graphs, recursive_merged_nodes, **kwargs):
         if level == levels - 1:
             model = skipgram.Word2Vec_hs_loss(edges, sg=kwargs['sg'], size=kwargs['representation_size'], iter=kwargs['iter'][level], window=kwargs['window_size'], sample=sample, alpha=alpha_list[level], min_alpha=min_alpha_list[level])
         else:
+            print('level', level)
             model = skipgram.Word2Vec_hs_loss(None, sg=kwargs['sg'], size=kwargs['representation_size'], iter=kwargs['iter'][level], window=kwargs['window_size'], sample=sample, alpha=alpha_list[level], min_alpha=min_alpha_list[level])
 
             # copy vocab / index2word from the coarser graph
-            model.wv.vocab = copy.deepcopy(models[-1].wv.vocab)
-            model.wv.index2word = copy.deepcopy(models[-1].wv.index2word)
-            model.wv.syn0 = copy.deepcopy(models[-1].wv.syn0)
-            model.wv.syn0.resize(recursive_graphs[level].number_of_nodes(), kwargs['representation_size'])
-            model.wv.syn0norm = None
+            model.vocab = copy.deepcopy(models[-1].vocab)
+            model.index2word = copy.deepcopy(models[-1].index2word)
+            model.syn0 = copy.deepcopy(models[-1].syn0)
+            model.syn0.resize(recursive_graphs[level].number_of_nodes(), kwargs['representation_size'])
+
+            model.syn0norm = None
             model.corpus_count = len(edges)
 
             cur_merged_nodes = [(node, merged_node) for node, merged_node in recursive_merged_nodes[level].iteritems() if node != merged_node]
@@ -479,22 +460,22 @@ def skipgram_coarsening_hs(recursive_graphs, recursive_merged_nodes, **kwargs):
                     node_pool = [node, merged_node]
                 prev_node = node
 
-            cur_index = len(models[-1].wv.vocab)
+            cur_index = len(models[-1].vocab)
             for node, merged_node in changed_merged_nodes:
                 if node == merged_node:
                     continue
                 str_node, str_merged_node = str(node), str(merged_node)
-                word_index = model.wv.vocab[str_merged_node].index
-                init_vec = model.wv.syn0[word_index]
+                word_index = model.vocab[str_merged_node].index
+                init_vec = model.syn0[word_index]
                 model.add_word(str_node, str_merged_node, init_vec, cur_index)
                 cur_index += 1
                 model.add_word(str_merged_node, str_merged_node, init_vec, cur_index)
 
-            model.syn1 = np.zeros((len(model.wv.vocab), model.layer1_size), dtype=np.float32)
+            model.syn1 = np.zeros((len(model.vocab), model.layer1_size), dtype=np.float32)
             for i in range(len(models[-1].syn1)):
                 model.syn1[i] = models[-1].syn1[i]
-            model.syn0_lockf = np.ones(len(model.wv.vocab), dtype=np.float32)
-            model.train(edges, total_examples=model.corpus_count, epochs=model.iter)
+            model.syn0_lockf = np.ones(len(model.vocab), dtype=np.float32)
+            model.train(edges, total_examples=model.corpus_count)
 
         models.append(model)
 
@@ -547,24 +528,24 @@ def skipgram_coarsening_neg(recursive_graphs, recursive_merged_nodes, **kwargs):
             model.reset_weights()
 
             # init model weights with the previous one
-            prev_syn0 = {models[-1].wv.index2word[ind]: vec for ind, vec in enumerate(models[-1].wv.syn0)}
-            prev_syn1neg = {models[-1].wv.index2word[ind]: vec for ind, vec in enumerate(models[-1].syn1neg)}
-            word2index = {model.wv.index2word[ind]: ind for ind in range(recursive_graphs[level].number_of_nodes())}
+            prev_syn0 = {models[-1].index2word[ind]: vec for ind, vec in enumerate(models[-1].syn0)}
+            prev_syn1neg = {models[-1].index2word[ind]: vec for ind, vec in enumerate(models[-1].syn1neg)}
+            word2index = {model.index2word[ind]: ind for ind in range(recursive_graphs[level].number_of_nodes())}
             for ind in range(recursive_graphs[level].number_of_nodes()):
-                word = model.wv.index2word[ind]
+                word = model.index2word[ind]
                 if word in prev_syn0:
-                    model.wv.syn0[ind] = prev_syn0[word]
+                    model.syn0[ind] = prev_syn0[word]
                     model.syn1neg[ind] = prev_syn1neg[word]
                 else:
                     # if a is merged into b, then a should has identical weights in word2vec as b
                     if int(word) in recursive_merged_nodes[level]:
                         word_ind = word2index[word]
                         merged_word = str(recursive_merged_nodes[level][int(word)])
-                        model.wv.syn0[word_ind] = prev_syn0[merged_word]
+                        model.syn0[word_ind] = prev_syn0[merged_word]
                         model.syn1neg[word_ind] = prev_syn1neg[merged_word]
-            model.syn0_lockf = np.ones(len(model.wv.vocab), dtype=np.float32)
+            model.syn0_lockf = np.ones(len(model.vocab), dtype=np.float32)
 
-            model.train(edges, total_examples=model.corpus_count, epochs=model.iter)
+            model.train(edges, total_examples=model.corpus_count)
 
         models.append(model)
 

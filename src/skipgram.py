@@ -65,9 +65,9 @@ class Word2Vec_hs_loss(Word2Vec):
         if word != parent_word:
             self.vocab[word] = Vocab(index=word_index, count=fake_vocab_size-word_index,sample_int=(2**32))
             if emb is not None:
-                self.wv.syn0[cur_index] = emb
+                self.syn0[cur_index] = emb
             else:
-                self.wv.syn0[cur_index] = self.wv.syn0[parent_index]
+                self.syn0[cur_index] = self.syn0[parent_index]
             # the node in the coarsened graph serves as an inner node now
             self.index2word.append(word)
             self.vocab[word].code = array(list(self.vocab[parent_word].code) + [0], dtype=uint8)
@@ -75,7 +75,7 @@ class Word2Vec_hs_loss(Word2Vec):
             self.inner_node_index_map[parent_word] = inner_node_index
         else:
             if emb is not None:
-                self.wv.syn0[parent_index] = emb
+                self.syn0[parent_index] = emb
             self.vocab[word].code = array(list(self.vocab[word].code) + [1], dtype=uint8)
             self.vocab[word].point = array(list(self.vocab[word].point) + [self.inner_node_index_map[word]], dtype=uint32)
 

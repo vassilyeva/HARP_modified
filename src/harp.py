@@ -37,6 +37,9 @@ def main():
                         help='Window size of the Skip-gram model.')
     parser.add_argument('--workers', default=1, type=int,
                         help='Number of parallel processes.')
+    # adding argument for louvain vs the original coarsening scheme
+    parser.add_argument('--coarsening', default = 'original',
+                        help='Coarsening scheme: original or louvain.')
     args = parser.parse_args()
 
     # Process args
@@ -59,18 +62,18 @@ def main():
                 sfdp_path=args.sfdp_path,
                 num_paths=args.number_walks,path_length=args.walk_length,
                 representation_size=args.representation_size,window_size=args.window_size,
-                lr_scheme='default',alpha=0.025,min_alpha=0.001,sg=1,hs=1,coarsening_scheme=2, sample=0.1)
+                lr_scheme='default',alpha=0.025,min_alpha=0.001,sg=1,hs=1,coarsening_scheme=2, sample=0.1, c_type = args.coarsening)
     elif args.model == 'node2vec':
         embeddings = graph_coarsening.skipgram_coarsening_disconnected(G,scale=-1,iter_count=1,
                 sfdp_path=args.sfdp_path,
                 num_paths=args.number_walks,path_length=args.walk_length,
                 representation_size=args.representation_size,window_size=args.window_size,
-                lr_scheme='default',alpha=0.025,min_alpha=0.001,sg=1,hs=0,coarsening_scheme=2, sample=0.1)
+                lr_scheme='default',alpha=0.025,min_alpha=0.001,sg=1,hs=0,coarsening_scheme=2, sample=0.1, c_type = args.coarsening)
     elif args.model == 'line':
         embeddings = graph_coarsening.skipgram_coarsening_disconnected(G,scale=1, iter_count=50,
                 sfdp_path=args.sfdp_path,
                 representation_size=64,window_size=1,
-                lr_scheme='default',alpha=0.025,min_alpha=0.001,sg=1,hs=0,sample=0.001)
+                lr_scheme='default',alpha=0.025,min_alpha=0.001,sg=1,hs=0,sample=0.001, c_type = args.coarsening)
     np.save(args.output, embeddings)
 
 if __name__ == '__main__':
